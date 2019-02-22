@@ -6,6 +6,8 @@ __pycache__/
 # VScode files
 .vscode/
 
+
+test.py
 # C extensions
 *.so
 
