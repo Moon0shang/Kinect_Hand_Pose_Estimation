@@ -22,6 +22,7 @@ def convt_gray(depth):
 
     # using a threshold to filt the hand region
     filt_img = original_img.copy()
+    filt_img = original_img.copy()
     filt_img[filt_img == 0] = 255
     threshod = np.min(filt_img)
     filt_img[filt_img > (threshod + 10)] = 0
@@ -108,7 +109,7 @@ def hand_segment(depth, filt_img, threshod, hands_num=1):
 
 
 if __name__ == "__main__":
-    num = 330
+    num = 660
     depth = np.load('./frames/%d.npy' % num)
     depth, original_img, filt_img, threshod = convt_gray(depth)
     # mask, p_max, p_min = creat_mask(filt_img, threshod, flags=0)
@@ -116,7 +117,7 @@ if __name__ == "__main__":
     # mask = mask < threshod-1
     # #new_im = cv2.copyTo(depth, mask[0])
     # depth[mask] = 0
-    seg_image = hand_segment(depth, filt_img, threshod, hands_num=1)
+    seg_image = hand_segment(depth, filt_img, threshod, hands_num=2)
     cv2.imshow("hand1", np.uint8(seg_image[0] / 16.))
     if len(seg_image) == 2:
         cv2.imshow('hand2', np.uint8(seg_image[1] / 16.))

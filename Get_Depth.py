@@ -51,26 +51,26 @@ class Depth(object):
 
     def config(self):
 
-        self.Kinect = Freenect2()
-        num_devices = self.Kinect.enumerateDevices()
+        Fn = Freenect2()
+        num_devices = Fn.enumerateDevices()
         if num_devices == 0:
             print("No device connected!")
             sys.exit(1)
 
-        serial = fn.getDeviceSerialNumber(0)
-        self.device = fn.openDevice(serial, pipeline=pipeline)
+        serial = Fn.getDeviceSerialNumber(0)
+        self.device = Fn.openDevice(serial, pipeline=pipeline)
         self.listener = SyncMultiFrameListener(
             FrameType.Color | FrameType.Ir | FrameType.Depth)
 
         # Register listeners
-        self.device.setColorFrameListener(listener)
-        self.device.setIrAndDepthFrameListener(listener)
+        self.device.setColorFrameListener(self.listener)
+        self.device.setIrAndDepthFrameListener(self.listener)
 
         self.device.start()
 
         # NOTE: must be called after device.start()
-        self.registration = Registration(device.getIrCameraParams(),
-                                         device.getColorCameraParams())
+        self.registration = Registration(self.device.getIrCameraParams(),
+                                         self.device.getColorCameraParams())
 
         self.undistorted = Frame(512, 424, 4)
         self.registered = Frame(512, 424, 4)
@@ -80,18 +80,18 @@ class Depth(object):
         self.need_bigdepth = False
         self.need_color_depth_map = False
 
-        self.bigdepth = Frame(1920, 1082, 4) if need_bigdepth else None
+        self.bigdepth = Frame(1920, 1082, 4) if self.need_bigdepth else None
         self.color_depth_map = np.zeros((424, 512),  np.int32).ravel() \
-            if need_color_depth_map else None
+            if self.need_color_depth_map else None
 
         # Optinal parameters for registration
         # set True if you need
         self.need_bigdepth = False
         self.need_color_depth_map = False
 
-        self.bigdepth = Frame(1920, 1082, 4) if need_bigdepth else None
+        self.bigdepth = Frame(1920, 1082, 4) if self.need_bigdepth else None
         self.color_depth_map = np.zeros((424, 512),  np.int32).ravel() \
-            if need_color_depth_map else None
+            if self.need_color_depth_map else None
 
     def draw_depth_frame(self, frame, target_surface):
         if frame is None:
@@ -106,7 +106,7 @@ class Depth(object):
 
     def run(self):
 
-        while self.__over:
+        while self._done:
             # --- Main event loop
             for event in pygame.event.get():  # User did something
                 if event.type == pygame.QUIT:  # If user clicked close
@@ -115,21 +115,22 @@ class Depth(object):
                 elif event.type == pygame.VIDEORESIZE:  # window resized
                     self._screen = pygame.display.set_mode(event.dict['size'],
                                                            pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.RESIZABLE, 32)
-            frames = listener.waitForNewFrame()
+            frames = self.listener.waitForNewFrame()
 
             color = frames["color"]
             ir = frames["ir"]
             depth = frames["depth"]
 
-            registration.apply(color, depth, undistorted, registered,
-                               bigdepth=bigdepth,
-                               color_depth_map=color_depth_map)
+            registration.apply(color, depth, self.undistorted, self.registered,
+                               bigdepth=self.bigdepth,
+                               color_depth_map=self.color_depth_map)
 
             self.draw_depth_frame(depth, self.target_surface, t)
             depth = None
 
             self._screen.blit(self._frame_surface, (0, 0))
             pygame.display.update()
+            self.listener.release(frames)
 
             # --- Go ahead and update the screen with what we've drawn.
             pygame.display.flip()
