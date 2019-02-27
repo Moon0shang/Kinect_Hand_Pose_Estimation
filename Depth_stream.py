@@ -30,11 +30,17 @@ setGlobalLogger(logger)
 
 
 class Depth(object):
+
     def __init__(self):
 
         self._done = False
+        self.cover = None
 
     def run(self):
+        """
+        main function to start Kinect and read depth information from Kinect, show video and save it
+        """
+
         Fn = Freenect2()
         num_devices = Fn.enumerateDevices()
         if num_devices == 0:
@@ -56,14 +62,17 @@ class Depth(object):
 
             frames = listener.waitForNewFrame()
             depth = frames["depth"]
+            depth = depth.asarray().clip(0, 4096)
 
-            if i > 60:
-                hand_frame, mask = self.segmentation(depth)
+            hand_contour = self._find_contour(depth)
+            darks = np.zeros((424, 512), dtype=np.uint8)
+            if cv2.contourArea(hand_contour[0]) < 1000 or cv2.contourArea(hand_contour) > 5000:
+                self.cover = np.uint8(depth/16.)
             else:
-                mask = np.uint8(depth.asarray().clip(1, 4096)/16.)
+                seg_depth = self._segment(depth, hand_contour, darks)
 
-            cv2.imshow("depth", mask)
-            depth_video.write(mask)
+            cv2.imshow("depth", self.cover)
+            depth_video.write(self.cover)
 
             listener.release(frames)
             i += 1
@@ -78,16 +87,25 @@ class Depth(object):
 
         sys.exit()
 
-    def segmentation(self, depth):
+    def _find_contour(self, depth):
+        """
+        find the contour of hands
 
-        depth = depth.asarray().clip(0, 4096)
+        Args:
+            depth (ndarray): the original depth information
+
+        Returns:
+            hand_contour (list): the contour points list of hands
+        """
+        # get the hand part
         filt_img = np.uint8(depth.copy() / 16.)
         filt_img[filt_img == 0] = 255
-        threshod = np.min(filt_img)
-        filt_img[filt_img > (threshod + 10)] = 0
+        self.threshold = np.min(filt_img)
+        filt_img[filt_img > (self.threshold + 10)] = 0
 
         # turn the gray image to binary image
-        (_, bin_image) = cv2.threshold(filt_img, threshod, 255, cv2.THRESH_BINARY)
+        (_, bin_image) = cv2.threshold(filt_img,
+                                       self.threshold, 255, cv2.THRESH_BINARY)
 
         # find contours and select the one/two with largest Area which stand for the hands
         (contours, _) = cv2.findContours(
@@ -95,23 +113,36 @@ class Depth(object):
         hand_contour = sorted(contours, key=cv2.contourArea,
                               reverse=True)[:1]
 
-        darks = np.zeros(bin_image.shape, dtype=np.uint8)
+        return hand_contour
+
+    def _segment(self, depth, hand_contour, darks):
+        """
+        segment the hand and return the segmentation image and the mask image
+
+        Args:
+            depth (ndarray): the original depth information 
+            hand_contour (list): the list of hand contour
+            darks (ndarray): all dark image mask
+
+        Returns:
+            seg_depth (ndarray): the segmentation depth data of hands
+        """
 
         p_max = np.max(hand_contour, 1)[0, 0]
         p_min = np.min(hand_contour, 1)[0, 0]
 
         # fill the dark image with hands part
         mask = cv2.fillPoly(darks, hand_contour, 255)
-        cover = mask.copy()
-        mask = mask < (threshod - 1)
+        self.cover = mask.copy()
+        mask = mask < (self.threshold - 1)
 
         depth_image = depth.copy()
         depth_image[mask] = 0
-        seg_image = depth_image[p_min[1] - 2:p_max[1] + 2,
+        seg_depth = depth_image[p_min[1] - 2:p_max[1] + 2,
                                 p_min[0] - 2:p_max[0] + 2]
-        seg_image = np.uint8(seg_image / 16.)
+        # seg_image = np.uint8(seg_image / 16.)
 
-        return seg_image, cover
+        return seg_depth
 
 
 if __name__ == "__main__":
