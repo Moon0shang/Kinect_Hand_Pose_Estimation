@@ -48,14 +48,16 @@ def creat_mask(gray_image, threshod, hands_num):
 
     # turn the gray image to binary image
     (_, bin_image) = cv2.threshold(gray_image, threshod, 255, cv2.THRESH_BINARY)
-
+    cv2.imwrite('./stuffs/bin_img.jpg', bin_image)
     # find contours and select the one/two with largest Area which stand for the hands
     (contours, _) = cv2.findContours(
         bin_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     hand_contour = sorted(contours, key=cv2.contourArea,
                           reverse=True)[:hands_num]
 
+    print(cv2.contourArea(hand_contour[0]))
     darks = np.zeros(bin_image.shape, dtype=np.uint8)
+    cv2.imwrite('./stuffs/dark.jpg', darks)
 
     mask = [None] * hands_num
     p_max = [None] * hands_num
@@ -65,9 +67,11 @@ def creat_mask(gray_image, threshod, hands_num):
 
         p_max[i] = np.max(hand, 1)[0, 0]
         p_min[i] = np.min(hand, 1)[0, 0]
-
+        cnt = cv2.drawContours(darks.copy(), hand, 0, 255)
+        cv2.imwrite('./stuffs/contours.jpg', cnt)
         # fill the dark image with hands part
         mask[i] = cv2.fillPoly(darks, hand, 255)
+        cv2.imwrite('./stuffs/mask.jpg', mask[i])
 
     return mask, p_max, p_min
 
@@ -78,7 +82,7 @@ def hand_segment(depth, filt_img, threshod, hands_num=1):
 
     Args:
         depth (ndarray): the depth information
-        filt_img (ndarrray): the threshold image after filtering`
+        filt_img (ndarrray): the threshold image after filtering;
         threshod (int): the threshold of hands(raw)
         hands_num (int, optional): Defaults to 1. the number of hands, can only be choosed from {1,2}
 
@@ -109,7 +113,7 @@ def hand_segment(depth, filt_img, threshod, hands_num=1):
 
 
 if __name__ == "__main__":
-    num = 660
+    num = 300
     depth = np.load('./frames/%d.npy' % num)
     depth, original_img, filt_img, threshod = convt_gray(depth)
     # mask, p_max, p_min = creat_mask(filt_img, threshod, flags=0)
@@ -117,8 +121,9 @@ if __name__ == "__main__":
     # mask = mask < threshod-1
     # #new_im = cv2.copyTo(depth, mask[0])
     # depth[mask] = 0
-    seg_image = hand_segment(depth, filt_img, threshod, hands_num=2)
+    seg_image = hand_segment(depth, filt_img, threshod, hands_num=1)
     cv2.imshow("hand1", np.uint8(seg_image[0] / 16.))
+    cv2.imwrite("./stuffs/seged.jpg", np.uint8(seg_image[0] / 16.))
     if len(seg_image) == 2:
         cv2.imshow('hand2', np.uint8(seg_image[1] / 16.))
     cv2.waitKey(0)
