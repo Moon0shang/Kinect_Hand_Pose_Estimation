@@ -66,7 +66,7 @@ class Depth(object):
 
             hand_contour = self._find_contour(depth)
             darks = np.zeros((424, 512), dtype=np.uint8)
-            if cv2.contourArea(hand_contour[0]) < 1000 or cv2.contourArea(hand_contour) > 5000:
+            if cv2.contourArea(hand_contour[0]) < 1000 or cv2.contourArea(hand_contour[0]) > 5000:
                 self.cover = np.uint8(depth/16.)
             else:
                 seg_depth = self._segment(depth, hand_contour, darks)
@@ -138,8 +138,8 @@ class Depth(object):
 
         depth_image = depth.copy()
         depth_image[mask] = 0
-        seg_depth = depth_image[p_min[1] - 2:p_max[1] + 2,
-                                p_min[0] - 2:p_max[0] + 2]
+        seg_depth = depth_image[p_min[1] - 1:p_max[1] + 1,
+                                p_min[0] - 1:p_max[0] + 1]
         # seg_image = np.uint8(seg_image / 16.)
 
         return seg_depth
