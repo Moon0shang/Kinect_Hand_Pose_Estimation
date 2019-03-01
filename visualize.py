@@ -1,4 +1,5 @@
 import numpy as np
+from preprocess import preproces
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -25,11 +26,28 @@ def visualize(hand_points, label):
 if __name__ == "__main__":
 
     plt.ion()
-    data_matlab = sio.loadmat('./matlab/hand_point-1.mat')
-    data_matlab = data_matlab['hand_points']
-    visualize(data_matlab, 'matlab')
-    data_python = sio.loadmat('./python/hand_points-1.mat')
-    data_python = data_python['hand_points']
-    visualize(data_python, 'python')
+    depth = np.load('./sample.npy')
+    depth = {'depth': depth}
+    pp = preproces(depth)
+    hand_points = pp._point_cloud()
+
+    idx = hand_points[:, 2] > 500
+    hand_points = hand_points[idx, :]
+    visualize(hand_points, "seg_hand")
+
+    hand_points_rotate = pp._rotate(hand_points)
+    visualize(hand_points_rotate, "rotate")
+
+    hand_points_sampling = pp._sampling(hand_points_rotate)
+    visualize(hand_points_sampling, "sampling")
+
+    hand_points_normalized = pp._normalize(
+        hand_points_rotate, hand_points_sampling)
+    visualize(hand_points_sampling, "normalized")
+
+    points_cloud_1, points_cloud = pp.get_point_cloud(hand_points_normalized)
+    visualize(points_cloud_1, "PC1")
+    visualize(points_cloud, "PC2")
+
     plt.ioff()
     plt.show()
