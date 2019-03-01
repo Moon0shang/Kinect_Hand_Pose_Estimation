@@ -16,7 +16,18 @@ class preproces(object):
         self.sample_num_l1 = 512
         self.sample_num_l2 = 128
 
-    def point_cloud(self):
+    def run(self):
+        hand_points = self._point_cloud()
+        hand_points_rotate = self._rotate(hand_points)
+        hand_points_rotate_sampled = self._sampling(hand_points_rotate)
+        hand_points_normalized_sampled = self._normalize(
+            hand_points_rotate, hand_points_rotate_sampled)
+        (_, points_cloud) = self._two_farthest_sampling(
+            hand_points_normalized_sampled)
+
+        return points_cloud
+
+    def _point_cloud(self):
 
         [height, width] = self.seg_depth.shape
         pixel_num = width * height
@@ -131,7 +142,7 @@ class preproces(object):
                     # a = None
         return np.unique(sampled_idx)
 
-    def get_point_cloud(self, hand_points_normalized_sampled):
+    def _two_farthest_sampling(self, hand_points_normalized_sampled):
 
         # sample level 1
         sampled_idx_l1 = self._farthest_point_sampling_fast(
