@@ -48,6 +48,11 @@ class preproces(object):
         nor = hand_points - pca_mean
         (_, _, coeff) = np.linalg.svd(nor, full_matrices=False)
         coeff = np.transpose(coeff)
+        if coeff[1, 0] < 0:
+            coeff[:, 0] = -coeff[:, 0]
+        if coeff[2, 2] < 0:
+            coeff[:, 2] = -coeff[:, 2]
+        coeff[:, 1] = np.cross(coeff[:, 2], coeff[:, 0])
         sio.savemat('./compare/coeff.mat', {'coeff': coeff})
         hand_points_rotate = np.dot(hand_points, coeff)
 
@@ -138,19 +143,19 @@ class preproces(object):
             hand_points_normalized_sampled.shape[0], dtype=np.int32)
         new_idx[:sampled_idx_l1.shape[0]] = sampled_idx_l1
         new_idx[sampled_idx_l1.shape[0]:] = other_idx
-        point_cloud = hand_points_normalized_sampled[new_idx, :]
-        point_cloud_1 = point_cloud.copy()
+        points_cloud = hand_points_normalized_sampled[new_idx, :]
+        points_cloud_1 = points_cloud.copy()
         # sample level 2
         sampled_idx_l2 = self._farthest_point_sampling_fast(
-            point_cloud[:self.sample_num_l1], self.sample_num_l2)
+            points_cloud[:self.sample_num_l1], self.sample_num_l2)
         other_idx = np.array(
             list(set(np.arange(self.sample_num_l1)) - set(sampled_idx_l2)))
         new_idx = np.empty(self.sample_num_l1, dtype=np.int32)
         new_idx[:sampled_idx_l2.shape[0]] = sampled_idx_l2
         new_idx[sampled_idx_l2.shape[0]:] = other_idx
-        points_cloud = point_cloud[new_idx, :]
+        points_cloud[:self.sample_num_l1, :] = points_cloud[new_idx, :]
 
-        return point_cloud_1, points_cloud
+        return points_cloud_1, points_cloud
 
     def _bin_depth(self):
         "get point cloud from depth informations"
