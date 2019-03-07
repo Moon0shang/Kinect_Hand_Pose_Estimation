@@ -20,7 +20,6 @@ from net.utils import group_points
 from net.network import PointNet_Plus
 
 # data process
-from Hand_segmentation import find_contour, segmentation
 from preprocess import preproces
 
 # Kinect related
@@ -72,11 +71,13 @@ class Hand_estimation(object):
         self.listener = SyncMultiFrameListener(FrameType.Depth)
         self.device.setIrAndDepthFrameListener(self.listener)
         self.device.start()
+        IRP = device.getIrCameraParams()
+        focal = IRP.fx
 
     def network_config(self):
         """
         define the network and config it
-        
+
         Returns:
             netR (network):  the network model
             optimizer (network): the optimizer of the network
@@ -88,16 +89,15 @@ class Hand_estimation(object):
             netR.netR_1 = torch.nn.DataParallel(netR.netR_1, range(opt.ngpu))
             netR.netR_2 = torch.nn.DataParallel(netR.netR_2, range(opt.ngpu))
             netR.netR_3 = torch.nn.DataParallel(netR.netR_3, range(opt.ngpu))
-        if opt.model != '':
-            netR.load_state_dict(torch.load(os.path.join(save_dir, opt.model)))
+
+        netR.load_state_dict(torch.load('./netR_58.pth'))
 
         netR.cuda()
 
         optimizer = optim.Adam(
             netR.parameters(), lr=opt.learning_rate, betas=(0.5, 0.999), eps=1e-06)
-        if opt.optimizer != '':
-            optimizer.load_state_dict(torch.load(
-                os.path.join(save_dir, opt.optimizer)))
+
+        # optimizer.load_state_dict(torch.load('./optimizer_59.pth'))
 
         return netR, optimizer
 
@@ -106,19 +106,54 @@ class Hand_estimation(object):
         main part of the program
         """
 
-        self.start_kinect()
+        # self.start_kinect()
+        Fn = Freenect2()
+        num_devices = Fn.enumerateDevices()
+        if num_devices == 0:
+            print("No device connected!")
+            sys.exit(1)
+
+        serial = Fn.getDeviceSerialNumber(0)
+        device = Fn.openDevice(serial, pipeline=pipeline)
+
+        # select the depth data only
+        listener = SyncMultiFrameListener(FrameType.Depth)
+        device.setIrAndDepthFrameListener(listener)
+        device.start()
+
+        # get camera focal
+        IRP = device.getIrCameraParams()
+        Focal = IRP.fx
 
         netR, optimizer = self.network_config()
 
         # switch to evaluate mode
         torch.cuda.synchronize()
         netR.eval()
+        print("net start")
+
+        # record videos
+        fourcc = cv2.VideoWriter_fourcc('m', 'j', 'p', 'g')
+        depth_video = cv2.VideoWriter(
+            'Depth.avi', fourcc, 15, (512, 424))
+        seg_video = cv2.VideoWriter('Seg.avi', fourcc, 15, (512, 424), 0)
+
+        try:
+            os.mkdir('./results')
+            os.mkdir('./results/dp')
+            os.mkdir('./results/pc')
+            os.mkdir('./results/out')
+            os.mkdir('./results/off')
+            os.mkdir('./results/max')
+        except:
+            pass
 
         # Get depth stream and estimate the joints location
+        # count = 0
         while not self.done:
 
             # get depth data: 424*512 size
-            frames = self.listener.waitForNewFrame()
+            frames = listener.waitForNewFrame()
             depth = frames["depth"]
             depth = depth.asarray().clip(0, 4080)   # 16*255=4080
 
@@ -128,20 +163,35 @@ class Hand_estimation(object):
                 [gray_image.shape[0], gray_image.shape[1], 3], dtype=np.uint8)
             depth_image[:, :, 0] = gray_image
             depth_image[:, :, 1] = gray_image
-            depth_image[:,:, 2] = gray_image
+            depth_image[:, :, 2] = gray_image
 
             hand_contour = self.find_contour(gray_image)
             darks = np.zeros((424, 512), dtype=np.uint8)
-            if cv2.contourArea(hand_contour[0]) < 1000 or cv2.contourArea(hand_contour[0]) > 2500:
-                show_image = depth_image
-            else:
-                seg_depth = self.segmentation(depth, hand_contour, darks)
-                pre = preproces(depth)
-                point_clouds, max_bb3d_len, offset = pre.run()
 
+            exist = True
+            try:
+                hand_area = cv2.contourArea(hand_contour[0])
+                if hand_area < 700 or hand_area > 5000:
+                    exist = False
+            except:
+                exist = False
+
+            if exist:
+                seg_depth, p_max, p_min = self.segmentation(
+                    depth, hand_contour, darks)
+                # np.save('./results/dp/depth%d.npy' % count, seg_depth)
+                # show_image = self.cover
+                pre = preproces(seg_depth, Focal)
+                point_clouds, max_bb3d_len, offset, location = pre.run()
+                # np.save('./results/pc/points_cloud%d.npy' % count, point_clouds)
                 # joints = self.estimate(netR, optimizer, point_clouds)
-                point_clouds = point_clouds.cuda()
-                inputs_level1, inputs_level1_center = group_points(point_clouds, opt)
+                point_cloud = np.empty(
+                    [1, opt.SAMPLE_NUM, opt.INPUT_FEATURE_NUM], dtype=np.float32)
+                point_cloud[0, :, :] = point_clouds
+                point_cloud = torch.from_numpy(point_cloud)
+                point_cloud = point_cloud.cuda()
+                inputs_level1, inputs_level1_center = group_points(
+                    point_cloud, opt)
                 inputs_level1 = Variable(inputs_level1, requires_grad=False)
                 inputs_level1_center = Variable(
                     inputs_level1_center, requires_grad=False)
@@ -153,56 +203,52 @@ class Hand_estimation(object):
 
                 # get estimation and save it
                 joints = estimation.data.cpu()
-                np.save('./results.npy', joints)
 
-                joints = (joints + offset)*max_bb3d_len
-                joints = joints.reshape(-1, 3)
-                show_image = self.draw_joints(depth_image, joints)
+                # np.save('./results/out/results%d.npy' % count, joints)
+                # np.save('./results/off/offset%d.npy' % count, offset)
+                # np.save('./results/max/max_bb3d_len%d.npy' % count, max_bb3d_len)
+                # count += 1
+                joint = joints.view(-1, 3).numpy()
 
+                # location rematch
+                joint = joint + offset
+
+                p_middel = (p_max+p_min)/2
+
+                for i in range(len(joint)):
+                    joint[i, 0] = (joint[i, 0] * Focal) /\
+                        joint[i, 2]+p_middel[0]
+                    joint[i, 1] = (joint[i, 1] * Focal) /\
+                        joint[i, 2]+p_middel[1]
+
+                # print('focal:', Focal, '\nmax_bb:', max_bb3d_len)
+                show_image = self.draw_joints(
+                    depth_image, joint.astype(np.int32))
+                cover = self.cover
+            else:
+                show_image = depth_image
+                cover = darks
+
+            cv2.imshow('cover', cover)
             cv2.imshow("results", show_image)
 
-            self.listener.release(frames)
+            seg_video.write(cover)
+            depth_video.write(show_image)
+
+            listener.release(frames)
 
             key = cv2.waitKey(delay=1)
 
             if key == ord('q'):
                 self._done = True
 
-        self.close_kinect()
+        seg_video.release()
+        depth_video.release()
+        device.stop()
+        device.close()
 
-    # def estimate(self, netR, optimizer, point_clouds):
-    #     """
-    #     the network to estimate the joints
-        
-    #     Args:
-    #         netR (network): the net model
-    #         optimizer (network): the optimizer of the net
-    #         point_clouds (ndarray): the data using for estimation
-        
-    #     Returns:
-    #         outputs (ndarray): output joints data
-    #     """
-
-    #     # switch to evaluate mode
-    #     torch.cuda.synchronize()
-    #     netR.eval()
-
-    #     point_clouds = point_clouds.cuda()
-    #     inputs_level1, inputs_level1_center = group_points(point_clouds, opt)
-    #     inputs_level1 = Variable(inputs_level1, requires_grad=False)
-    #     inputs_level1_center = Variable(
-    #         inputs_level1_center, requires_grad=False)
-
-    #     # compute output
-    #     optimizer.zero_grad()
-    #     estimation = netR(inputs_level1, inputs_level1_center)
-    #     torch.cuda.synchronize()
-
-    #     # get estimation and save it
-    #     outputs = estimation.data.cpu()
-    #     np.save('./results.npy', outputs)
-
-    #     return outputs
+        sys.exit()
+        # self.close_kinect()
 
     def find_contour(self, gray_image):
         """
@@ -216,7 +262,7 @@ class Hand_estimation(object):
         """
         # get the hand part
         #filt_img = np.uint8(depth.copy() / 16.)
-        filt_img=gray_image
+        filt_img = gray_image
         filt_img[filt_img == 0] = 255
         self.threshold = np.min(filt_img)
         filt_img[filt_img > (self.threshold + 10)] = 0
@@ -256,36 +302,41 @@ class Hand_estimation(object):
 
         depth_image = depth.copy()
         depth_image[mask] = 0
-        seg_depth = depth_image[p_min[1] - 1:p_max[1] + 1,
-                                p_min[0] - 1:p_max[0] + 1]
+        seg_depth = depth_image[p_min[1]:p_max[1],
+                                p_min[0]:p_max[0]]
         # seg_image = np.uint8(seg_image / 16.)
 
-        return seg_depth
+        return seg_depth, p_max, p_min
 
-    def draw_joints(self,image, joints):
+    def draw_joints(self, image, joints):
         """
         draw the joints in the depth image
-        
+
         Args:
             image (ndarray): the gray image of depth
             joints (ndarray): the joints of hand
-        
+
         Returns:
             image (ndarray): the final image for showing
         """
 
-        # draw the points of joints 
-        for i in range(joints.shape[0]):
-            cv2.circle(image, joints[i,:2], 5, (0, 0, 255), -1)
-        
+        # draw the points of joints
+        # for i in range(joints.shape[0]):
+        #     cv2.circle(image, tuple(joints[i, :2]), 5, (0, 0, 255), -1)
+
         # draw the lines between joints, 20 lines in total
         # for the joints, the order is: wrist(1 point), thumb(5 points), index finger(5 points)
         # middel finger(5 points), ring finger(5 points), little finger(5 points)
-        color = ((160,32,240),(255,0,0),(255,165,0),(0,255,0),(205,135,63))
+        color = ((160, 32, 240), (255, 0, 0),
+                 (255, 165, 0), (0, 255, 0), (205, 135, 63))
+
         for j in range(5):
-            cv2.line(image,joints[0,:2],joints[1+4*j,:2],color[j],2)
+            cv2.line(image, tuple(joints[0, :2]), tuple(
+                joints[1+4*j, :2]), tuple(color[j]), 2)
             for k in range(3):
-                cv2.line(image, joints[1+4*j+k, :2], joints[2+4*j+k, :2],color[j],2)
+                cv2.line(image, tuple(joints[1+4*j+k, :2]),
+                         tuple(joints[2+4*j+k, :2]),
+                         tuple(color[j]), 2)
 
         return image
 
@@ -298,3 +349,8 @@ class Hand_estimation(object):
         self.device.close()
 
         sys.exit()
+
+
+if __name__ == "__main__":
+    he = Hand_estimation()
+    he.main()

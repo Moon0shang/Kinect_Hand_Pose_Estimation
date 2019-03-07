@@ -30,7 +30,7 @@ def main(opt):
     random.seed(opt.manualSeed)
     torch.manual_seed(opt.manualSeed)
 
-    save_dir = './TTTTT'
+    save_dir = './offline/results'
 
     try:
         os.makedirs(save_dir)
@@ -57,8 +57,7 @@ def main(opt):
         netR.netR_3 = torch.nn.DataParallel(netR.netR_3, range(opt.ngpu))
 
     # NOTE
-    netR.load_state_dict(torch.load(
-        '/media/xidian/Data/XuYuanquan/Kinect_Hand_Pose_Estimation/results/P0/netR_58.pth'))
+    netR.load_state_dict(torch.load('./netR_58.pth'))
 
     netR.cuda()
 
@@ -113,7 +112,7 @@ def application(netR,  optimizer, data_loader, data_length, epoch):
         # 3.1.4 update training error
         outputs = estimation.data
 
-        np.save('./TTTTT/normal%d.npy' % epoch, outputs.cpu())
+        np.save('./offline/results/out%d.npy' % epoch, outputs.cpu())
 
     # time taken
     torch.cuda.synchronize()

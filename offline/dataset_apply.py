@@ -15,7 +15,7 @@ class HandPointDataset(data.Dataset):
 
         self.points_cloud = np.empty(
             [1, self.SAMPLE_NUM, self.INPUT_FEATURE_NUM], dtype=np.float32)
-        self.points_cloud[0, :, :] = np.load('./normal_pc.npy')
+        self.points_cloud[0, :, :] = np.load('./seg_depth100.npy')
 
     def __getitem__(self, index):
         return self.points_cloud[index, :, :]

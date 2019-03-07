@@ -4,29 +4,29 @@ import cv2
 import numpy as np
 from threading import Thread
 
-# from Hand_segmentation import convt_gray, hand_segment
+from Hand_segmentation import convt_gray, hand_segment
 
-# from pylibfreenect2 import Freenect2, SyncMultiFrameListener
-# from pylibfreenect2 import FrameType, Frame, Registration
-# from pylibfreenect2 import createConsoleLogger, setGlobalLogger
-# from pylibfreenect2 import LoggerLevel
+from pylibfreenect2 import Freenect2, SyncMultiFrameListener
+from pylibfreenect2 import FrameType, Frame, Registration
+from pylibfreenect2 import createConsoleLogger, setGlobalLogger
+from pylibfreenect2 import LoggerLevel
 
-# try:
-#     from pylibfreenect2 import OpenGLPacketPipeline
-#     pipeline = OpenGLPacketPipeline()
-# except:
-#     try:
-#         from pylibfreenect2 import OpenCLPacketPipeline
-#         pipeline = OpenCLPacketPipeline()
-#     except:
-#         from pylibfreenect2 import CpuPacketPipeline
-#         pipeline = CpuPacketPipeline()
+try:
+    from pylibfreenect2 import OpenGLPacketPipeline
+    pipeline = OpenGLPacketPipeline()
+except:
+    try:
+        from pylibfreenect2 import OpenCLPacketPipeline
+        pipeline = OpenCLPacketPipeline()
+    except:
+        from pylibfreenect2 import CpuPacketPipeline
+        pipeline = CpuPacketPipeline()
 
-# print("Packet pipeline:", type(pipeline).__name__)
+print("Packet pipeline:", type(pipeline).__name__)
 
-# # Create and set logger
-# logger = createConsoleLogger(LoggerLevel.Debug)
-# setGlobalLogger(logger)
+# Create and set logger
+logger = createConsoleLogger(LoggerLevel.Debug)
+setGlobalLogger(logger)
 
 
 class Depth(object):
@@ -53,9 +53,9 @@ class Depth(object):
         device.setIrAndDepthFrameListener(listener)
         device.start()
 
-        # fourcc = cv2.VideoWriter_fourcc('m', 'j', 'p', 'g')
-        # depth_video = cv2.VideoWriter(
-        #     'Depth.avi', fourcc, 30.0, (512, 424), 0)
+        fourcc = cv2.VideoWriter_fourcc('m', 'j', 'p', 'g')
+        depth_video = cv2.VideoWriter(
+            'Depth.avi', fourcc, 30.0, (512, 424), 0)
 
         i = 0
         while not self._done:
@@ -73,8 +73,7 @@ class Depth(object):
                 np.save('./seg_depth%d.npy' % i, seg_depth)
                 i += 1
             cv2.imshow("depth", self.cover)
-            # depth_video.write(self.cover)
-            # np.save('./seg_depth%d.npy' % i, seg_depth)
+            depth_video.write(self.cover)
 
             listener.release(frames)
 
@@ -83,7 +82,7 @@ class Depth(object):
             if key == ord('q'):
                 self._done = True
 
-        # depth_video.release()
+        depth_video.release()
         device.stop()
         device.close()
 
