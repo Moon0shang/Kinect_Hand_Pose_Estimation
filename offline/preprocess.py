@@ -233,3 +233,11 @@ class preproces(object):
         points_cloud[:self.sample_num_l1, :] = points_cloud[new_idx, :]
 
         return points_cloud_1, points_cloud
+
+
+if __name__ == "__main__":
+    depth = np.load('./offline/data/seg_depth100.npy')
+    focal = 364.5
+    pp = preproces(depth, focal)
+    points_cloud = pp.run()
+    np.save('./offline/pc/points_clou.npy', points_cloud)

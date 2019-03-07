@@ -70,7 +70,7 @@ class Depth(object):
                 self.cover = np.uint8(depth/16.)
             else:
                 seg_depth = self._segment(depth, hand_contour, darks)
-                np.save('./seg_depth%d.npy' % i, seg_depth)
+                np.save('./offline/data/seg_depth%d.npy' % i, seg_depth)
                 i += 1
             cv2.imshow("depth", self.cover)
             depth_video.write(self.cover)
