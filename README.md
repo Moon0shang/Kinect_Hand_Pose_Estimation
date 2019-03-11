@@ -24,11 +24,9 @@ a project use kinect and CNN to estimate hand gesture
   - get segmenmtation depth data from `Depth_stream.py`
   - process the data by runing `preprocess.py`
   - and last the `eval.py`
-    `modify the files to meet your needs`
+    `modify the files to meet your nee
 
-
-
-
+**if there are any problem with the offline version, please modify follow the online version.**
 
 
 
